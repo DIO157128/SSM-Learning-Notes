@@ -151,7 +151,7 @@ public class AppForLifeCycle {
 
 close()这个方法在ApplicationContext接口中并没有定义（Ctrl+H查看）
 
-![image-20241113153502581](C:\Users\lenovo\AppData\Roaming\Typora\typora-user-images\image-20241113153502581.png)
+![image-20241113153502581](pics\image-20241113153502581.png)
 
 在AbstractApplicationContext这个抽象类中才有定义，因此，如果需要使用close()方法，ctx对象类型需要指定为ClassPathXmlApplicationContext
 
@@ -347,3 +347,80 @@ public class BookDaoImpl implements BookDao {
     </property>
 </bean>
 ```
+
+## Day2
+
+### 如何加载properties文件？
+
+#### 开启context命名空间
+
+```xml
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xmlns:context="http://www.springframework.org/schema/context"//new
+       xsi:schemaLocation="
+            http://www.springframework.org/schema/beans
+            http://www.springframework.org/schema/beans/spring-beans.xsd
+            http://www.springframework.org/schema/context                     //new
+            http://www.springframework.org/schema/context/spring-context.xsd  //new
+            ">
+```
+
+第三行的context代表context命名空间，之后两行新的复制出来的结果就是把bean换成context
+
+#### 使用context空间加载properties文件
+
+```xml
+<context:property-placeholder location="jdbc.properties" system-properties-mode="NEVER"/>
+```
+
+system-properties-mode代表不加载系统的环境变量，系统环境变量优先级大于配置文件
+
+如果有多个properties文件要加载，写成如下格式
+
+```xml
+<context:property-placeholder location="classpath*:*.properties" system-properties-mode="NEVER"/>
+```
+
+第二个*可以加载当前工程中所有的properties文件，第一个 *可以加载所有的properties文件（比如jar包里的）
+
+#### 使用属性占位符${}读取properties文件中的属性
+
+```xml
+<bean class="com.alibaba.druid.pool.DruidDataSource">
+    <property name="driverClassName" value="${jdbc.driver}"/>
+    <property name="url" value="${jdbc.url}"/>
+    <property name="username" value="${jdbc.username}"/>
+    <property name="password" value="${jdbc.password}"/>
+</bean>
+```
+
+### 如何加载配置文件？
+
+```java
+//1.加载类路径下的配置文件
+ApplicationContext ctx = new ClassPathXmlApplicationContext("applicationContext.xml");
+//2.从文件系统下加载配置文件
+ApplicationContext ctx = new FileSystemXmlApplicationContext("D:\\workspace\\spring\\spring_10_container\\src\\main\\resources\\applicationContext.xml");
+
+```
+
+如果加载多个配置文件，直接，加配置名就可以了
+
+### 三种不同的获取bean的方式
+
+```java
+BookDao bookDao = (BookDao) ctx.getBean("bookDao");//强转
+BookDao bookDao = ctx.getBean("bookDao",BookDao.class);//将类指定
+BookDao bookDao = ctx.getBean(BookDao.class);//按bean类型获取，这种方式要求ctx中只有这一个类型的bean
+```
+
+### BeanFactory（过时）
+
+spring早期加载bean的方式，与applicationContext不同的是，beanfactory是延迟加载bean，applicationContext是容器启动就加载bean，如果想让ctx也延迟加载，可以加上如下参数
+
+```xml
+<bean id="bookDao" class="com.itheima.dao.impl.BookDaoImpl" lazy-init="true"/>
+```
+
+![image-20241114142307369](pics\image-20241114142307369.png)
