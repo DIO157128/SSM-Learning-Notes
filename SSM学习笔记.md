@@ -151,7 +151,7 @@ public class AppForLifeCycle {
 
 close()这个方法在ApplicationContext接口中并没有定义（Ctrl+H查看）
 
-![image-20241113153502581](pics\image-20241113153502581.png)
+![image-20241113153502581](./pics/image-20241113153502581.png)
 
 在AbstractApplicationContext这个抽象类中才有定义，因此，如果需要使用close()方法，ctx对象类型需要指定为ClassPathXmlApplicationContext
 
@@ -423,4 +423,291 @@ spring早期加载bean的方式，与applicationContext不同的是，beanfactor
 <bean id="bookDao" class="com.itheima.dao.impl.BookDaoImpl" lazy-init="true"/>
 ```
 
-![image-20241114142307369](pics\image-20241114142307369.png)
+![image-20241114142307369](./pics/image-20241114142307369.png)
+
+### 总结
+
+#### bean相关
+
+![image-20241114143118786](./pics\image-20241114143118786.png)
+
+#### 依赖注入相关
+
+![image-20241114143222643](./pics\image-20241114143222643.png)
+
+### 注解开发定义bean
+
+```java
+//@Component定义bean
+@Component("bookDao")//括号里的就是id
+public class BookDaoImpl implements BookDao {
+    public void save() {
+        System.out.println("book dao save ...");
+    }
+}
+```
+
+```xml
+<context:component-scan base-package="com.itheima"/>
+```
+
+spring有三个衍生注解，与component作用相同，用于区分业务层数据层和表现层
+
+```java
+@Repository("bookController")
+@Service("bookService")
+@Controller("bookController")
+```
+
+### 纯注解开发模式
+
+```java
+package com.itheima.config;
+
+import org.springframework.context.annotation.ComponentScan;
+import org.springframework.context.annotation.Configuration;
+
+//声明当前类为Spring配置类
+@Configuration
+//设置bean扫描路径，多个路径书写为字符串数组格式
+@ComponentScan({"com.itheima.service","com.itheima.dao"})
+public class SpringConfig {
+}
+```
+
+作用相当于原本的applicationContext.xml文件
+
+```java
+public class AppForAnnotation {
+    public static void main(String[] args) {
+        //AnnotationConfigApplicationContext加载Spring配置类初始化Spring容器
+        ApplicationContext ctx = new AnnotationConfigApplicationContext(SpringConfig.class);
+        BookDao bookDao = (BookDao) ctx.getBean("bookDao");
+        System.out.println(bookDao);
+        //按类型获取bean
+        BookService bookService = ctx.getBean(BookService.class);
+        System.out.println(bookService);
+    }
+}
+```
+
+### 注解控制bean控制范围与生命周期
+
+```java
+@Repository
+//@Scope设置bean的作用范围
+@Scope("singleton")
+public class BookDaoImpl implements BookDao {
+
+    public void save() {
+        System.out.println("book dao save ...");
+    }
+    //@PostConstruct设置bean的初始化方法，运行于构造方法后
+    @PostConstruct
+    public void init() {
+        System.out.println("init ...");
+    }
+    //@PreDestroy设置bean的销毁方法，运行于销毁前
+    @PreDestroy
+    public void destroy() {
+        System.out.println("destroy ...");
+    }
+
+}
+```
+
+### 注解依赖注入
+
+```java
+@Service
+public class BookServiceImpl implements BookService {
+    //@Autowired：注入引用类型
+    @Autowired
+    //@Qualifier：自动装配bean时按bean名称装配，用于有多个dao对象的情况
+    @Qualifier("bookDao")
+    private BookDao bookDao;
+
+    public void save() {
+        System.out.println("book service save ...");
+        bookDao.save();
+    }
+}
+```
+
+自动装配基于反射设计创建对象，暴力反射对应属性为私有属性初始化数值，无需提供setter方法
+
+自动装配建议使用无参构造方法创建对象，如果不提供对应构造方法，确保构造方法唯一
+
+### 简单类型注入
+
+```java
+@Repository("bookDao")
+public class BookDaoImpl implements BookDao {
+    //@Value：注入简单类型（无需提供set方法）
+    @Value("${name}")
+    private String name;
+
+    public void save() {
+        System.out.println("book dao save ..." + name);
+    }
+}
+```
+
+```java
+@Configuration
+@ComponentScan("com.itheima")
+//@PropertySource加载properties配置文件
+@PropertySource({"jdbc.properties"})
+public class SpringConfig {
+}
+```
+
+如果想从properties文件中加载值，则需要在config类中指定properties路径
+
+与xml不同的是，@PropertySource不支持通配符，因此classpath* :*.properties非法，只能写classpath:jdbc.properties
+
+### 管理第三方bean
+
+```java
+@Configuration
+@ComponentScan("com.itheima")
+//@Import:导入配置信息
+@Import({JdbcConfig.class})
+public class SpringConfig {
+}
+```
+
+```java
+public class JdbcConfig {
+    //1.定义一个方法获得要管理的对象
+    @Value("com.mysql.jdbc.Driver")
+    private String driver;
+    @Value("jdbc:mysql://localhost:3306/spring_db")
+    private String url;
+    @Value("root")
+    private String userName;
+    @Value("root")
+    private String password;
+    //2.添加@Bean，表示当前方法的返回值是一个bean
+    //@Bean修饰的方法，形参根据类型自动装配
+    @Bean
+    public DataSource dataSource(BookDao bookDao){
+        System.out.println(bookDao);
+        DruidDataSource ds = new DruidDataSource();
+        ds.setDriverClassName(driver);
+        ds.setUrl(url);
+        ds.setUsername(userName);
+        ds.setPassword(password);
+        return ds;
+    }
+}
+```
+
+比如这里要管理第三方的druiddatasource，把它写到JdbcConfig里，写一个管理这个bean的方法加上@Bean注解，然后在SpringConfig中import
+
+简单类型注入用@Value，引用类型直接根据形参按类型注入
+
+### Spring整合Mybatis
+
+```xml
+<properties resource="jdbc.properties"></properties>
+<typeAliases>
+    <package name="com.itheima.domain"/>
+</typeAliases>
+<environments default="mysql">
+    <environment id="mysql">
+        <transactionManager type="JDBC"></transactionManager>
+        <dataSource type="POOLED">
+            <property name="driver" value="${jdbc.driver}"></property>
+            <property name="url" value="${jdbc.url}"></property>
+            <property name="username" value="${jdbc.username}"></property>
+            <property name="password" value="${jdbc.password}"></property>
+        </dataSource>
+    </environment>
+</environments>
+<mappers>
+    <package name="com.itheima.dao"></package>
+</mappers>
+```
+
+```java
+public static void main(String[] args) throws IOException {
+    // 1. 创建SqlSessionFactoryBuilder对象
+    SqlSessionFactoryBuilder sqlSessionFactoryBuilder = new SqlSessionFactoryBuilder();
+    // 2. 加载SqlMapConfig.xml配置文件
+    InputStream inputStream = Resources.getResourceAsStream("SqlMapConfig.xml.bak");
+    // 3. 创建SqlSessionFactory对象
+    SqlSessionFactory sqlSessionFactory = sqlSessionFactoryBuilder.build(inputStream);
+    // 4. 获取SqlSession
+    SqlSession sqlSession = sqlSessionFactory.openSession();
+    // 5. 执行SqlSession对象执行查询，获取结果User
+    AccountDao accountDao = sqlSession.getMapper(AccountDao.class);
+
+    Account ac = accountDao.findById(2);
+    System.out.println(ac);
+
+    // 6. 释放资源
+    sqlSession.close();
+}
+```
+
+观察原本的config与main，根据每一项来编写MyBatisConfig。我们需要的是SqlSessionFactoryBuilder,所以针对这个类创建bean管理
+
+```java
+public class MybatisConfig {
+    //定义bean，SqlSessionFactoryBean，用于产生SqlSessionFactory对象
+    @Bean
+    public SqlSessionFactoryBean sqlSessionFactory(DataSource dataSource){
+        SqlSessionFactoryBean ssfb = new SqlSessionFactoryBean();
+        ssfb.setTypeAliasesPackage("com.itheima.domain");
+        ssfb.setDataSource(dataSource);
+        return ssfb;
+    }
+    //定义bean，返回MapperScannerConfigurer对象
+    @Bean
+    public MapperScannerConfigurer mapperScannerConfigurer(){
+        MapperScannerConfigurer msc = new MapperScannerConfigurer();
+        msc.setBasePackage("com.itheima.dao");
+        return msc;
+    }
+}
+```
+
+```java
+public static void main(String[] args) {
+    ApplicationContext ctx = new AnnotationConfigApplicationContext(SpringConfig.class);
+
+    AccountService accountService = ctx.getBean(AccountService.class);
+
+    Account ac = accountService.findById(1);
+    System.out.println(ac);
+}
+```
+
+### Spring整合JUnit
+
+```java
+@RunWith(SpringJUnit4ClassRunner.class)
+//设置Spring环境对应的配置类
+@ContextConfiguration(classes = SpringConfig.class)
+public class AccountServiceTest {
+    //支持自动装配注入bean
+    @Autowired
+    private AccountService accountService;
+
+    @Test
+    public void testFindById(){
+        System.out.println(accountService.findById(1));
+
+    }
+
+    @Test
+    public void testFindAll(){
+        System.out.println(accountService.findAll());
+    }
+
+
+}
+```
+
+指定运行器和运行上下文，这两个都是固定的
