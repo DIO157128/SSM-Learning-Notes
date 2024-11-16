@@ -711,3 +711,261 @@ public class AccountServiceTest {
 ```
 
 指定运行器和运行上下文，这两个都是固定的
+
+## Day3
+
+### AOP核心概念
+
+![image-20241115142956299](./pics\image-20241115142956299.png)
+
+### 定义切片
+
+```java
+//通知类必须配置成Spring管理的bean
+@Component
+//设置当前类为切面类类
+@Aspect
+public class MyAdvice {
+    //设置切入点，要求配置在方法上方
+    @Pointcut("execution(void com.itheima.dao.BookDao.update())")
+    private void pt(){}
+
+    //设置在切入点pt()的前面运行当前操作（前置通知）
+    // @Before("pt()")
+    public void method(){
+        System.out.println(System.currentTimeMillis());
+    }
+}
+```
+
+切入点定义依托一个不具有实际意义的方法进行，无参数无返回值方法体无实际逻辑。
+
+还需要去config类里启用aspect
+
+```java
+@Configuration
+@ComponentScan("com.itheima")
+//开启注解开发AOP功能
+@EnableAspectJAutoProxy
+public class SpringConfig {
+}
+```
+
+### AOP工作流程
+
+1. spring容器启动
+2. 读取所有切面配置中的切入点
+3. 初始化bean，判定bean对应的类中的方法是否匹配到任意切入点
+   - 匹配失败则创建bean对象
+   - 匹配成功则创建原始对象（目标对象）的代理对象
+4. 获取bean执行方法
+   - 获取bean，调用方法并执行，完成操作
+   - 获取的bean是代理对象时，根据代理对象的运行模式运行原始方法与增强的内容，完成操作
+
+- 目标对象（target）：原始功能去掉共性功能对应的类产生的对象，这种对象是无法直接完成最终任务的
+- 代理（Proxy）：目标对象无法直接完成工作，需要对其进行功能回填，通过原始对象的代理对象实现。
+
+### AOP切入点表达式
+
+![image-20241115150424542](./pics\image-20241115150424542.png)
+
+![image-20241115150639203](./pics\image-20241115150639203.png)
+
+![image-20241115152411112](./pics\image-20241115152411112.png)
+
+### AOP通知类型
+
+#### 前置通知
+
+```java
+    //@Before：前置通知，在原始方法运行之前执行
+@Before("pt()")
+    public void before() {
+        System.out.println("before advice ...");
+    }
+```
+
+#### 后置通知
+
+```java
+//@After：后置通知，在原始方法运行之后执行
+@After("pt2()")
+    public void after() {
+        System.out.println("after advice ...");
+    }
+```
+
+#### 环绕通知
+
+```java
+//@Around：环绕通知，在原始方法运行的前后执行
+@Around("pt()")
+    public Object around(ProceedingJoinPoint pjp) throws Throwable {
+        System.out.println("around before advice ...");
+        //表示对原始操作的调用
+        Object ret = pjp.proceed();
+        System.out.println("around after advice ...");
+        return ret;
+    }
+```
+
+原来方法有返回值，需要返回
+
+#### 返回后通知
+
+```java
+//@AfterReturning：返回后通知，在原始方法执行完毕后运行，且原始方法执行过程中未出现异常现象
+@AfterReturning("pt2()")
+    public void afterReturning() {
+        System.out.println("afterReturning advice ...");
+    }
+```
+
+#### 抛出异常后通知
+
+```java
+//@AfterThrowing：抛出异常后通知，在原始方法执行过程中出现异常后运行
+@AfterThrowing("pt2()")
+public void afterThrowing() {
+    System.out.println("afterThrowing advice ...");
+}
+```
+
+### 案例：万次调用效率
+
+```java
+//匹配业务层的所有方法
+@Pointcut("execution(* com.itheima.service.*Service.*(..))")
+private void servicePt(){}
+
+//设置环绕通知，在原始操作的运行前后记录执行时间
+@Around("ProjectAdvice.servicePt()")
+public void runSpeed(ProceedingJoinPoint pjp) throws Throwable {
+    //获取执行的签名对象
+    Signature signature = pjp.getSignature();
+    String className = signature.getDeclaringTypeName();
+    String methodName = signature.getName();
+
+    long start = System.currentTimeMillis();
+    for (int i = 0; i < 10000; i++) {
+       pjp.proceed();
+    }
+    long end = System.currentTimeMillis();
+    System.out.println("万次执行："+ className+"."+methodName+"---->" +(end-start) + "ms");
+}
+```
+
+### AOP通知获取数据
+
+```java
+    //JoinPoint：用于描述切入点的对象，必须配置成通知方法中的第一个参数，可用于获取原始方法调用的参数
+    @Before("pt()")
+    public void before(JoinPoint jp) {
+        Object[] args = jp.getArgs();
+        System.out.println(Arrays.toString(args));
+        System.out.println("before advice ..." );
+    }
+```
+
+```java
+    //ProceedingJoinPoint：专用于环绕通知，是JoinPoint子类，可以实现对原始方法的调用
+    @Around("pt()")
+    public Object around(ProceedingJoinPoint pjp) {
+        Object[] args = pjp.getArgs();
+        System.out.println(Arrays.toString(args));
+        args[0] = 666;
+        Object ret = null;
+        try {
+            ret = pjp.proceed(args);
+        } catch (Throwable t) {
+            t.printStackTrace();
+        }
+        return ret;
+    }
+```
+
+这里可以用来改参数，注意around用ProceedingJoinPoint，其他用JoinPoint
+
+```java
+//设置返回后通知获取原始方法的返回值，要求returning属性值必须与方法形参名相同
+@AfterReturning(value = "pt()",returning = "ret")
+public void afterReturning(JoinPoint jp,String ret) {
+    System.out.println("afterReturning advice ..."+ret);
+}
+
+//设置抛出异常后通知获取原始方法运行时抛出的异常对象，要求throwing属性值必须与方法形参名相同
+@AfterThrowing(value = "pt()",throwing = "t")
+public void afterThrowing(Throwable t) {
+    System.out.println("afterThrowing advice ..."+t);
+}
+```
+
+### Spring事务
+
+```java
+public interface AccountService {
+    /**
+     * 转账操作
+     * @param out 传出方
+     * @param in 转入方
+     * @param money 金额
+     */
+    //配置当前接口方法具有事务
+    @Transactional
+    public void transfer(String out,String in ,Double money) ;
+}
+```
+
+在业务层接口添加spring事务管理
+
+```java
+public class JdbcConfig {
+    //配置事务管理器，mybatis使用的是jdbc事务
+    @Bean
+    public PlatformTransactionManager transactionManager(DataSource dataSource){
+        DataSourceTransactionManager transactionManager = new DataSourceTransactionManager();
+        transactionManager.setDataSource(dataSource);
+        return transactionManager;
+    }
+}
+```
+
+设置事务管理器
+
+```java
+//开启注解式事务驱动
+@EnableTransactionManagement
+public class SpringConfig {
+}
+```
+
+开启注解式事务驱动
+
+### Spring事务角色
+
+![image-20241116021516586](./pics\image-20241116021516586.png)
+
+```java
+public interface LogService {
+    //propagation设置事务属性：传播行为设置为当前操作需要新事务
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    void log(String out, String in, Double money);
+}
+```
+
+```java
+@Transactional
+public void transfer(String out,String in ,Double money) {
+    try{
+        accountDao.outMoney(out,money);
+        int i = 1/0;
+        accountDao.inMoney(in,money);
+    }finally {
+        logService.log(out,in,money);
+    }
+}
+```
+
+在下面这个方法中，入钱和出钱和记日志被同一个事务管理员包括，如果希望记日志分开，就要设置事务传播行为
+
+![image-20241116022809036](./pics\image-20241116022809036.png)
