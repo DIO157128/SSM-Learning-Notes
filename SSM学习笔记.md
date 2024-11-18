@@ -969,3 +969,128 @@ public void transfer(String out,String in ,Double money) {
 在下面这个方法中，入钱和出钱和记日志被同一个事务管理员包括，如果希望记日志分开，就要设置事务传播行为
 
 ![image-20241116022809036](./pics\image-20241116022809036.png)
+
+## Day4
+
+### SpringMVC入门
+
+```java
+@Controller
+public class UserController {
+
+    //设置映射路径为/save，即外部访问路径
+    @RequestMapping("/save")
+    //设置当前操作返回结果为指定json数据（本质上是一个字符串信息）
+    @ResponseBody
+    public String save(){
+        System.out.println("user save ...");
+        return "{'info':'springmvc'}";
+    }
+}
+```
+
+```java
+//springmvc配置类，本质上还是一个spring配置类
+@Configuration
+@ComponentScan("com.itheima.controller")
+public class SpringMvcConfig {
+}
+```
+
+```java
+//web容器配置类
+public class ServletContainersInitConfig extends AbstractDispatcherServletInitializer {
+    //加载springmvc配置类，产生springmvc容器（本质还是spring容器）
+    protected WebApplicationContext createServletApplicationContext() {
+        //初始化WebApplicationContext对象
+        AnnotationConfigWebApplicationContext ctx = new AnnotationConfigWebApplicationContext();
+        //加载指定配置类
+        ctx.register(SpringMvcConfig.class);
+        return ctx;
+    }
+
+    //设置由springmvc控制器处理的请求映射路径
+    protected String[] getServletMappings() {
+        return new String[]{"/"};
+    }
+
+    //加载spring配置类
+    protected WebApplicationContext createRootApplicationContext() {
+        return null;
+    }
+}
+```
+
+有个简化版本，继承不同类
+
+```java
+//web配置类简化开发，仅设置配置类类名即可
+public class ServletContainersInitConfig extends AbstractAnnotationConfigDispatcherServletInitializer {
+
+    protected Class<?>[] getRootConfigClasses() {
+        return new Class[]{SpringConfig.class};
+    }
+
+    protected Class<?>[] getServletConfigClasses() {
+        return new Class[]{SpringMvcConfig.class};
+    }
+
+    protected String[] getServletMappings() {
+        return new String[]{"/"};
+    }
+}
+```
+
+### 工作流程
+
+![image-20241116123453376](./pics\image-20241116123453376.png)
+
+### 乱码处理
+
+发post请求时，如果是中文会乱码
+
+```java
+public class ServletContainersInitConfig extends AbstractAnnotationConfigDispatcherServletInitializer {
+    protected Class<?>[] getRootConfigClasses() {
+        return new Class[0];
+    }
+
+    protected Class<?>[] getServletConfigClasses() {
+        return new Class[]{SpringMvcConfig.class};
+    }
+
+    protected String[] getServletMappings() {
+        return new String[]{"/"};
+    }
+
+    //乱码处理
+    @Override
+    protected Filter[] getServletFilters() {
+        CharacterEncodingFilter filter = new CharacterEncodingFilter();
+        filter.setEncoding("UTF-8");
+        return new Filter[]{filter};
+    }
+}
+```
+
+### REST风格
+
+REST（Representational State Transfer），表现形式状态转换
+
+![image-20241116172755552](./pics\image-20241116172755552.png)
+
+通过get,post,put,delete来区分
+
+## Day5
+
+### 所有的异常均抛出到表现层进行处理
+
+![image-20241117175328536](./pics\image-20241117175328536.png)
+
+### 拦截器与过滤器
+
+![image-20241117183639664](.\pics\image-20241117183639664.png)
+
+### 拦截器执行顺序
+
+![image-20241117185548996](.\pics\image-20241117185548996.png)
